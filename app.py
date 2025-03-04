@@ -1,61 +1,59 @@
-from flask import Flask
+import os
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 
-# Inicialización de la aplicación Flask
-app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://samvela_9quo_user:CeSAu0fQvU4hhgEGvM8FF29KfH0CMg2f@dpg-cv33matsvqrc739abqc0-a.oregon-postgres.render.com/samvela_9quo'
+from dotenv import load_dotenv 
+
+#Cargar las variables de entorno
+load_dotenv()
+
+#crear instancia
+app =  Flask(__name__)
+
+# Configuración de la base de datos PostgreSQL
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
-# Definición del modelo de la tabla 'categories'
+# Modelo Categoría
 class Category(db.Model):
     __tablename__ = 'categories'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False, unique=True)
 
-    def __repr__(self):
-        return f"<Category {self.name}>"
-
-# Definición del modelo de la tabla 'posts'
+# Modelo Post
 class Post(db.Model):
     __tablename__ = 'posts'
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
-    category = db.relationship('Category', backref='posts')
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    category = db.relationship('Category', backref=db.backref('posts', lazy=True))
 
-    def __repr__(self):
-        return f"<Post {self.title}>"
-
-# Función para crear datos de prueba
-def create_data():
-    # Verificar si la categoría con ID 2 existe, si no existe, crearla
-    category = Category.query.get(2)
-    if category is None:
-        print("La categoría con ID 2 no existe. Creándola...")
-        category = Category(id=2, name="Cryptocurrency")
-        db.session.add(category)
-        db.session.commit()
-    
-    # Ahora insertar el post con category_id=2
-    post = Post(
-        title="Bitcoin alcanza su máximo histórico en 2023",
-        content="El Bitcoin ha superado nuevamente las expectativas al alcanzar un nuevo máximo histórico de $45,000 este mes, impulsado por la adopción masiva de criptomonedas...",
-        category_id=2
-    )
-    db.session.add(post)
-    db.session.commit()
-    print("Post creado exitosamente.")
-
-# Ruta para retornar "Hola Mundo"
+# Ruta para ver todos los posts
 @app.route('/')
-def hola_mundo():
-    return "Hola Mundo"
+def index():
+    posts = Post.query.all()
+    categories = Category.query.all()
+    return render_template('index.html', posts=posts, categories=categories)
 
-# Ejecutar la función cuando se corra el script
+#Ruta /post crear un nuevo post
+@app.route('/post/new', methods=['GET','POST'])
+def add_post():
+    if request.method == 'POST':
+        title = request.form['title']
+        content = request.form['content']
+        category_id = request.form.get('category_id')
+        new_post = Post(title=title, content=content, category_id=category_id)
+        db.session.add(new_post)
+        db.session.commit()
+
+        return redirect(url_for('index'))
+    
+    #Aqui sigue si es GET
+    categories = Category.query.all()
+    return render_template('create_post.html', categories=categories)
+
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()  # Crear todas las tablas si no existen
-        create_data()  # Crear los datos de prueba
     app.run(debug=True)
